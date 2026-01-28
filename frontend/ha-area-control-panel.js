@@ -1888,9 +1888,7 @@ class HaAreaControlPanel extends LitElement {
       :host {
         display: block;
         height: 100%;
-        background: var(--primary-background-color, #111);
-        --primary-text-color: #fff;
-        --secondary-text-color: rgba(255, 255, 255, 0.7);
+        background: var(--primary-background-color);
       }
 
       .panel-container {
@@ -1899,42 +1897,68 @@ class HaAreaControlPanel extends LitElement {
         flex-direction: column;
       }
 
-      /* Header */
-      .header {
-        background: var(--app-header-background-color, #1976d2);
-        color: var(--app-header-text-color, #fff);
-        padding: 16px;
+      /* App Header - matches HA native style */
+      .app-header {
+        background-color: var(--app-header-background-color);
+        color: var(--app-header-text-color, var(--text-primary-color));
+        border-bottom: 1px solid var(--divider-color);
+        position: sticky;
+        top: 0;
+        z-index: 4;
         display: flex;
         align-items: center;
-        gap: 16px;
+        height: 56px;
+        padding: 0 4px;
+        box-sizing: border-box;
         flex-shrink: 0;
       }
 
-      .header-back {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
+      .toolbar-icon {
+        position: relative;
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         border: none;
         background: transparent;
         color: inherit;
         cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .header-back:hover {
-        background: rgba(255, 255, 255, 0.1);
-      }
-
-      .header-back ha-icon {
+        border-radius: 50%;
         --mdc-icon-size: 24px;
+      }
+
+      .toolbar-icon:hover {
+        background: var(--secondary-background-color);
+      }
+
+      .toolbar-icon:active {
+        background: var(--divider-color);
       }
 
       .header-title {
         font-size: 20px;
         font-weight: 400;
         flex: 1;
+        margin-left: 4px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      /* Hide menu button when sidebar is docked */
+      :host([narrow]) .menu-btn {
+        display: flex;
+      }
+
+      .menu-btn {
+        display: none;
+      }
+
+      @media (max-width: 870px) {
+        .menu-btn {
+          display: flex;
+        }
       }
 
       /* Content */
@@ -2109,6 +2133,15 @@ class HaAreaControlPanel extends LitElement {
     `;
   }
 
+  _toggleSidebar() {
+    this.dispatchEvent(
+      new CustomEvent("hass-toggle-menu", {
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
   _renderHeader() {
     let title = "Area Control";
     let showBack = false;
@@ -2123,14 +2156,18 @@ class HaAreaControlPanel extends LitElement {
     }
 
     return html`
-      <div class="header">
+      <div class="app-header">
         ${showBack
           ? html`
-              <button class="header-back" @click=${this._handleBack}>
+              <button class="toolbar-icon" @click=${this._handleBack} title="返回">
                 <ha-icon icon="mdi:arrow-left"></ha-icon>
               </button>
             `
-          : html`<ha-icon icon="mdi:view-dashboard"></ha-icon>`}
+          : html`
+              <button class="toolbar-icon menu-btn" @click=${this._toggleSidebar} title="開啟側邊欄">
+                <ha-icon icon="mdi:menu"></ha-icon>
+              </button>
+            `}
         <div class="header-title">${title}</div>
       </div>
     `;
