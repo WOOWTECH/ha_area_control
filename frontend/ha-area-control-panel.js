@@ -1660,7 +1660,7 @@ class DomainSection extends LitElement {
   }
 }
 
-customElements.define("domain-section", DomainSection);
+customElements.define("ac-domain-section", DomainSection);
 
 // ============================================================================
 // DOMAIN SUMMARY COMPONENT
@@ -2370,11 +2370,11 @@ class HaAreaControlPanel extends LitElement {
     return html`
       ${domains.map(
         (domain) => html`
-          <domain-section
+          <ac-domain-section
             .hass=${this.hass}
             .domain=${domain}
             .entities=${entities[domain]}
-          ></domain-section>
+          ></ac-domain-section>
         `
       )}
     `;
@@ -2391,11 +2391,11 @@ class HaAreaControlPanel extends LitElement {
     }
 
     return html`
-      <domain-section
+      <ac-domain-section
         .hass=${this.hass}
         .domain=${this._selectedDomain}
         .entities=${allEntities}
-      ></domain-section>
+      ></ac-domain-section>
     `;
   }
 }
