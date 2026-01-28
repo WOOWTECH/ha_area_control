@@ -2046,12 +2046,39 @@ class HaAreaControlPanel extends LitElement {
         type: "area_control/get_permitted_areas",
       });
       this._areas = result.areas || [];
+
+      // Load all area entities in parallel for better performance
+      const loadPromises = this._areas.map((area) =>
+        this._loadAreaEntitiesQuiet(area.id)
+      );
+      await Promise.all(loadPromises);
+
+      // Single requestUpdate after all data is loaded
+      this.requestUpdate();
     } catch (err) {
       console.error("Failed to load areas:", err);
       this._areas = [];
     }
     this._loading = false;
     this._areasLoading = false;
+  }
+
+  // Silent version - doesn't trigger requestUpdate (for batch loading)
+  async _loadAreaEntitiesQuiet(areaId) {
+    if (this._areaEntities[areaId]) return;
+
+    try {
+      const result = await this.hass.callWS({
+        type: "area_control/get_area_entities",
+        area_id: areaId,
+      });
+      this._areaEntities = {
+        ...this._areaEntities,
+        [areaId]: result.entities || {},
+      };
+    } catch (err) {
+      console.error("Failed to load area entities:", err);
+    }
   }
 
   async _loadAreaEntities(areaId) {
@@ -2187,11 +2214,7 @@ class HaAreaControlPanel extends LitElement {
   }
 
   _renderHomeView() {
-    // Load all area entities for counting
-    for (const area of this._areas) {
-      this._loadAreaEntities(area.id);
-    }
-
+    // Area entities are now loaded in parallel during _loadAreas()
     const counts = this._getDomainCounts();
     const activeDomains = SUMMARY_DOMAINS.filter((d) => counts[d] > 0 || true);
 
