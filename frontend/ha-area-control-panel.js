@@ -260,7 +260,7 @@ class BaseTile extends LitElement {
   }
 
   toggle() {
-    if (this.isUnavailable) return;
+    if (this.isUnavailable || !this.hass) return;
     const domain = this.entityId?.split(".")[0];
 
     if (domain === "scene" || domain === "script") {
@@ -464,6 +464,7 @@ class LightTile extends BaseTile {
 
   handleSliderChange(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     const value = parseInt(e.target.value);
     const brightness = Math.round((value / 100) * 255);
 
@@ -577,6 +578,7 @@ class ClimateTile extends BaseTile {
   }
 
   adjustTemp(delta) {
+    if (!this.hass) return;
     const newTemp = this.targetTemp + delta;
     const minTemp = this.entity?.attributes?.min_temp || 16;
     const maxTemp = this.entity?.attributes?.max_temp || 30;
@@ -684,16 +686,19 @@ class CoverTile extends BaseTile {
 
   handleOpen(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     this.hass.callService("cover", "open_cover", { entity_id: this.entityId });
   }
 
   handleStop(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     this.hass.callService("cover", "stop_cover", { entity_id: this.entityId });
   }
 
   handleClose(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     this.hass.callService("cover", "close_cover", { entity_id: this.entityId });
   }
 
@@ -797,6 +802,7 @@ class FanTile extends BaseTile {
 
   handleSliderChange(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     const value = parseInt(e.target.value);
 
     if (value === 0) {
@@ -938,6 +944,7 @@ class MediaPlayerTile extends BaseTile {
 
   handlePrev(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     this.hass.callService("media_player", "media_previous_track", {
       entity_id: this.entityId,
     });
@@ -945,6 +952,7 @@ class MediaPlayerTile extends BaseTile {
 
   handlePlayPause(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     this.hass.callService("media_player", "media_play_pause", {
       entity_id: this.entityId,
     });
@@ -952,12 +960,14 @@ class MediaPlayerTile extends BaseTile {
 
   handleNext(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     this.hass.callService("media_player", "media_next_track", {
       entity_id: this.entityId,
     });
   }
 
   toggle() {
+    if (!this.hass) return;
     this.hass.callService("media_player", "media_play_pause", {
       entity_id: this.entityId,
     });
@@ -1047,11 +1057,13 @@ class LockTile extends BaseTile {
 
   handleLock(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     this.hass.callService("lock", "lock", { entity_id: this.entityId });
   }
 
   handleUnlock(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     this.hass.callService("lock", "unlock", { entity_id: this.entityId });
   }
 
@@ -1143,16 +1155,19 @@ class VacuumTile extends BaseTile {
 
   handleStart(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     this.hass.callService("vacuum", "start", { entity_id: this.entityId });
   }
 
   handlePause(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     this.hass.callService("vacuum", "pause", { entity_id: this.entityId });
   }
 
   handleReturn(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     this.hass.callService("vacuum", "return_to_base", { entity_id: this.entityId });
   }
 
@@ -1220,6 +1235,7 @@ class SceneTile extends BaseTile {
   }
 
   toggle() {
+    if (!this.hass) return;
     this.hass.callService("scene", "turn_on", { entity_id: this.entityId });
   }
 
@@ -1300,6 +1316,7 @@ class ButtonTile extends BaseTile {
   }
 
   toggle() {
+    if (!this.hass) return;
     this.hass.callService("button", "press", { entity_id: this.entityId });
   }
 }
@@ -1312,6 +1329,7 @@ customElements.define("button-tile", ButtonTile);
 
 class ScriptTile extends SceneTile {
   toggle() {
+    if (!this.hass) return;
     this.hass.callService("script", "turn_on", { entity_id: this.entityId });
   }
 }
@@ -1399,6 +1417,7 @@ class HumidifierTile extends BaseTile {
 
   handleSliderChange(e) {
     e.stopPropagation();
+    if (!this.hass) return;
     const value = parseInt(e.target.value);
 
     this.hass.callService("humidifier", "set_humidity", {
@@ -1869,6 +1888,7 @@ class HaAreaControlPanel extends LitElement {
       _areas: { type: Array },
       _areaEntities: { type: Object },
       _loading: { type: Boolean },
+      _loadError: { type: String },
     };
   }
 
@@ -1881,6 +1901,10 @@ class HaAreaControlPanel extends LitElement {
     this._areaEntities = {};
     this._loading = true;
     this._areasLoading = false;
+    this._loadError = null;
+    // Memoization cache for domain counts
+    this._cachedDomainCounts = null;
+    this._lastHassStatesRef = null;
   }
 
   static get styles() {
@@ -2020,6 +2044,43 @@ class HaAreaControlPanel extends LitElement {
         height: 200px;
         color: var(--secondary-text-color);
       }
+
+      /* Error State */
+      .error-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 200px;
+        color: var(--error-color, #f44336);
+        text-align: center;
+        padding: 16px;
+      }
+
+      .error-icon {
+        margin-bottom: 12px;
+        --mdc-icon-size: 48px;
+      }
+
+      .error-message {
+        font-size: 14px;
+        margin-bottom: 16px;
+      }
+
+      .retry-button {
+        background: var(--primary-color);
+        color: var(--text-primary-color);
+        border: none;
+        border-radius: 8px;
+        padding: 8px 24px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: opacity 0.2s;
+      }
+
+      .retry-button:hover {
+        opacity: 0.9;
+      }
     `;
   }
 
@@ -2032,20 +2093,31 @@ class HaAreaControlPanel extends LitElement {
   updated(changedProperties) {
     super.updated(changedProperties);
     // Load areas when hass becomes available
+    // FIX: Set loading flag BEFORE async call to prevent race condition
     if (changedProperties.has("hass") && this.hass && this._areas.length === 0 && !this._areasLoading) {
+      this._areasLoading = true;  // Set flag immediately to prevent duplicate calls
       this._loadAreas();
     }
   }
 
   async _loadAreas() {
-    if (!this.hass) return;
-    this._areasLoading = true;
+    if (!this.hass) {
+      this._areasLoading = false;
+      return;
+    }
     this._loading = true;
+    this._loadError = null;
     try {
       const result = await this.hass.callWS({
         type: "area_control/get_permitted_areas",
       });
-      this._areas = result.areas || [];
+
+      // Validate response format
+      if (!result || !Array.isArray(result.areas)) {
+        throw new Error("Invalid response format from server");
+      }
+
+      this._areas = result.areas;
 
       // Load all area entities in parallel for better performance
       const loadPromises = this._areas.map((area) =>
@@ -2057,6 +2129,7 @@ class HaAreaControlPanel extends LitElement {
       this.requestUpdate();
     } catch (err) {
       console.error("Failed to load areas:", err);
+      this._loadError = err.message || "Failed to load areas";
       this._areas = [];
     }
     this._loading = false;
@@ -2100,6 +2173,12 @@ class HaAreaControlPanel extends LitElement {
   }
 
   _getDomainCounts() {
+    // Memoization: return cached value if hass.states hasn't changed
+    if (this._cachedDomainCounts && this._lastHassStatesRef === this.hass?.states) {
+      return this._cachedDomainCounts;
+    }
+    this._lastHassStatesRef = this.hass?.states;
+
     const counts = {};
 
     for (const domain of SUMMARY_DOMAINS) {
@@ -2121,7 +2200,17 @@ class HaAreaControlPanel extends LitElement {
       }
     }
 
+    this._cachedDomainCounts = counts;
     return counts;
+  }
+
+  _handleRetry() {
+    this._areasLoading = false;
+    this._areas = [];
+    this._areaEntities = {};
+    this._loadError = null;
+    this._areasLoading = true;
+    this._loadAreas();
   }
 
   _handleAreaSelected(e) {
@@ -2154,8 +2243,22 @@ class HaAreaControlPanel extends LitElement {
         <div class="content">
           ${this._loading
             ? html`<div class="loading">載入中...</div>`
-            : this._renderView()}
+            : this._loadError
+              ? this._renderError()
+              : this._renderView()}
         </div>
+      </div>
+    `;
+  }
+
+  _renderError() {
+    return html`
+      <div class="error-container">
+        <ha-icon class="error-icon" icon="mdi:alert-circle"></ha-icon>
+        <div class="error-message">${this._loadError}</div>
+        <button class="retry-button" @click=${this._handleRetry}>
+          重試
+        </button>
       </div>
     `;
   }
