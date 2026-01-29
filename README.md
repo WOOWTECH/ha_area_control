@@ -4,9 +4,11 @@
 [![GitHub Release](https://img.shields.io/github/v/release/WOOWTECH/ha_area_control)](https://github.com/WOOWTECH/ha_area_control/releases)
 [![License](https://img.shields.io/github/license/WOOWTECH/ha_area_control)](LICENSE)
 
+English | [简体中文](README_CN.md)
+
 A Home Assistant custom component that provides a sidebar panel for controlling entities organized by areas. Works with the [Permission Manager](https://github.com/WOOWTECH/ha_permission_manager) integration to show only the areas each user has permission to access.
 
-**Current Version: 1.4.0**
+**Current Version: 1.0.2**
 
 ## Features
 
@@ -17,6 +19,8 @@ A Home Assistant custom component that provides a sidebar panel for controlling 
 - **Domain Summary Dashboard**: 3x3 grid showing 9 domain categories (Lights, Climate, Covers, Fans, Media, Locks, Vacuums, Switches, Input Boolean)
 - **Domain Detail View**: Click domain summary cards to see all entities of that domain across all areas
 - **Area Detail View**: Click area cards to see all entities in that area, organized by domain
+- **Compact Domain Tabs**: Horizontal scrollable tabs showing domain icons and entity counts
+- **Search Functionality**: Real-time filtering of entities by name or entity ID
 - **Interactive Entity Tiles**:
   - Brightness sliders for lights
   - Temperature +/- controls for climate
@@ -100,7 +104,7 @@ The panel provides specialized tile controls for these domains:
 | `scene` | Activate, last triggered time |
 | `script` | Activate, last triggered time |
 | `automation` | Toggle enable/disable |
-| `sensor` | Display value with unit |
+| `sensor` | Display value with unit, 24h history sparkline chart |
 | `binary_sensor` | Display state |
 | `button` | Press action |
 | `humidifier` | Toggle, humidity slider |
@@ -135,11 +139,17 @@ Returns entities grouped by domain for a specific area.
 
 ## Changelog
 
-### v1.4.0
+### v1.0.2
+- Added compact horizontal domain tabs replacing collapsible sections
+- Added search bar for filtering entities by name or ID
+- Added 24h history sparkline charts on sensor tiles
+- Fixed card width consistency with uniform sizing
+
+### v1.0.1
 - Performance optimization: parallel loading for area entities
 - Reduced UI jitter on initial load
 
-### v1.3.0
+### v1.0.0
 - Native HA style UI redesign
 - Domain summary dashboard with 3x3 grid
 - Domain detail view
