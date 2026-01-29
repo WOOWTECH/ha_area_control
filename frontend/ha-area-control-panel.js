@@ -122,8 +122,8 @@ class BaseTile extends LitElement {
       .tile {
         background: var(--tile-bg, rgba(255, 255, 255, 0.05));
         border-radius: 12px;
-        padding: 12px 16px;
-        height: 64px;
+        padding: 16px;
+        height: 80px;
         width: 100%;
         box-sizing: border-box;
         display: flex;
