@@ -6,9 +6,6 @@
 const { LitElement, html, css } = await import(
   "https://cdn.jsdelivr.net/npm/lit@3.1.0/+esm"
 );
-const { ref } = await import(
-  "https://cdn.jsdelivr.net/npm/lit@3.1.0/directives/ref.js/+esm"
-);
 
 // ============================================================================
 // DESIGN TOKENS - HA Native Style
@@ -125,12 +122,14 @@ class BaseTile extends LitElement {
       .tile {
         background: var(--tile-bg, rgba(255, 255, 255, 0.05));
         border-radius: 12px;
-        padding: 12px;
-        height: 140px;
+        padding: 12px 16px;
+        height: 64px;
         width: 100%;
         box-sizing: border-box;
         display: flex;
-        flex-direction: column;
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
         cursor: pointer;
         transition: background-color 0.2s ease, transform 0.1s ease;
         position: relative;
@@ -151,13 +150,6 @@ class BaseTile extends LitElement {
 
       .tile.unavailable {
         opacity: 0.5;
-      }
-
-      .tile-header {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        flex: 0 0 auto;
       }
 
       .tile-icon {
@@ -185,6 +177,9 @@ class BaseTile extends LitElement {
         flex: 1;
         min-width: 0;
         overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
       }
 
       .tile-name {
@@ -201,13 +196,6 @@ class BaseTile extends LitElement {
         font-size: 12px;
         color: var(--secondary-text-color, rgba(255, 255, 255, 0.7));
         margin-top: 2px;
-      }
-
-      .tile-controls {
-        flex: 1;
-        display: flex;
-        align-items: flex-end;
-        padding-top: 8px;
       }
     `;
   }
@@ -293,7 +281,7 @@ class BaseTile extends LitElement {
 
   handleClick(e) {
     e.stopPropagation();
-    this.toggle();
+    this.openMoreInfo();
   }
 
   handleLongPress(e) {
@@ -347,11 +335,6 @@ class BaseTile extends LitElement {
     }
   }
 
-  renderControls() {
-    // Override in subclasses
-    return html``;
-  }
-
   render() {
     const entity = this.entity;
     if (!entity && !this.entityId) return html``;
@@ -366,16 +349,13 @@ class BaseTile extends LitElement {
         @click=${this.handleClick}
         @contextmenu=${this.handleLongPress}
       >
-        <div class="tile-header">
-          <div class="tile-icon">
-            <ha-icon icon=${this.icon}></ha-icon>
-          </div>
-          <div class="tile-info">
-            <div class="tile-name">${entity?.attributes?.friendly_name || this.entityId}</div>
-            <div class="tile-state">${this.stateDisplay}</div>
-          </div>
+        <div class="tile-icon">
+          <ha-icon icon=${this.icon}></ha-icon>
         </div>
-        <div class="tile-controls">${this.renderControls()}</div>
+        <div class="tile-info">
+          <div class="tile-name">${entity?.attributes?.friendly_name || this.entityId}</div>
+          <div class="tile-state">${this.stateDisplay}</div>
+        </div>
       </div>
     `;
   }
@@ -396,64 +376,10 @@ class BaseTile extends LitElement {
 customElements.define("base-tile", BaseTile);
 
 // ============================================================================
-// LIGHT TILE - with brightness slider
+// LIGHT TILE - compact with brightness percentage
 // ============================================================================
 
 class LightTile extends BaseTile {
-  static get styles() {
-    return [
-      super.styles,
-      css`
-        .slider-container {
-          width: 100%;
-          height: 24px;
-          position: relative;
-        }
-
-        .slider-track {
-          width: 100%;
-          height: 100%;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 12px;
-          overflow: hidden;
-          position: relative;
-        }
-
-        .slider-fill {
-          height: 100%;
-          background: var(--tile-color, #ffb300);
-          border-radius: 12px;
-          transition: width 0.1s ease;
-        }
-
-        .slider-input {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          opacity: 0;
-          cursor: pointer;
-          margin: 0;
-        }
-
-        .tile.off .slider-fill {
-          background: rgba(255, 255, 255, 0.3);
-        }
-
-        .brightness-value {
-          position: absolute;
-          right: 8px;
-          top: 50%;
-          transform: translateY(-50%);
-          font-size: 11px;
-          color: var(--primary-text-color, #fff);
-          pointer-events: none;
-        }
-      `,
-    ];
-  }
-
   get stateDisplay() {
     if (this.isUnavailable) return "無法使用";
     if (!this.isOn) return "關閉";
@@ -463,218 +389,34 @@ class LightTile extends BaseTile {
     }
     return "開啟";
   }
-
-  get brightnessPercent() {
-    const brightness = this.entity?.attributes?.brightness || 0;
-    return Math.round((brightness / 255) * 100);
-  }
-
-  handleSliderChange(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    const value = parseInt(e.target.value);
-    const brightness = Math.round((value / 100) * 255);
-
-    if (value === 0) {
-      this.hass.callService("light", "turn_off", { entity_id: this.entityId });
-    } else {
-      this.hass.callService("light", "turn_on", {
-        entity_id: this.entityId,
-        brightness: brightness,
-      });
-    }
-  }
-
-  handleSliderClick(e) {
-    e.stopPropagation();
-  }
-
-  renderControls() {
-    const percent = this.brightnessPercent;
-
-    return html`
-      <div class="slider-container" @click=${this.handleSliderClick}>
-        <div class="slider-track">
-          <div class="slider-fill" style="width: ${this.isOn ? percent : 0}%"></div>
-        </div>
-        <input
-          type="range"
-          class="slider-input"
-          min="0"
-          max="100"
-          .value=${percent}
-          @input=${this.handleSliderChange}
-          @click=${this.handleSliderClick}
-        />
-        ${this.isOn ? html`<span class="brightness-value">${percent}%</span>` : ""}
-      </div>
-    `;
-  }
 }
 
 customElements.define("light-tile", LightTile);
 
 // ============================================================================
-// CLIMATE TILE - with temperature +/- buttons
+// CLIMATE TILE - compact with temperature display
 // ============================================================================
 
 class ClimateTile extends BaseTile {
-  static get styles() {
-    return [
-      super.styles,
-      css`
-        .climate-controls {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          width: 100%;
-          gap: 8px;
-        }
-
-        .temp-button {
-          width: 36px;
-          height: 36px;
-          border-radius: 50%;
-          border: none;
-          background: rgba(255, 255, 255, 0.1);
-          color: var(--primary-text-color, #fff);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: background 0.2s ease;
-        }
-
-        .temp-button:hover {
-          background: rgba(255, 255, 255, 0.2);
-        }
-
-        .temp-button:active {
-          background: rgba(255, 255, 255, 0.3);
-        }
-
-        .temp-button ha-icon {
-          --mdc-icon-size: 18px;
-        }
-
-        .temp-display {
-          font-size: 18px;
-          font-weight: 500;
-          color: var(--primary-text-color, #fff);
-        }
-
-        .temp-display .unit {
-          font-size: 12px;
-          color: var(--secondary-text-color, rgba(255, 255, 255, 0.7));
-        }
-      `,
-    ];
-  }
-
   get stateDisplay() {
     if (this.isUnavailable) return "無法使用";
     const state = this.entity?.state;
     if (state === "off") return "關閉";
     const currentTemp = this.entity?.attributes?.current_temperature;
+    const targetTemp = this.entity?.attributes?.temperature;
+    if (currentTemp && targetTemp) return `${currentTemp}°C → ${targetTemp}°C`;
     if (currentTemp) return `${currentTemp}°C`;
     return state;
-  }
-
-  get targetTemp() {
-    return this.entity?.attributes?.temperature || 22;
-  }
-
-  adjustTemp(delta) {
-    if (!this.hass) return;
-    const newTemp = this.targetTemp + delta;
-    const minTemp = this.entity?.attributes?.min_temp || 16;
-    const maxTemp = this.entity?.attributes?.max_temp || 30;
-
-    if (newTemp >= minTemp && newTemp <= maxTemp) {
-      this.hass.callService("climate", "set_temperature", {
-        entity_id: this.entityId,
-        temperature: newTemp,
-      });
-    }
-  }
-
-  handleTempDown(e) {
-    e.stopPropagation();
-    this.adjustTemp(-0.5);
-  }
-
-  handleTempUp(e) {
-    e.stopPropagation();
-    this.adjustTemp(0.5);
-  }
-
-  renderControls() {
-    if (!this.isOn) return html``;
-
-    return html`
-      <div class="climate-controls">
-        <button class="temp-button" @click=${this.handleTempDown}>
-          <ha-icon icon="mdi:minus"></ha-icon>
-        </button>
-        <div class="temp-display">
-          ${this.targetTemp}<span class="unit">°C</span>
-        </div>
-        <button class="temp-button" @click=${this.handleTempUp}>
-          <ha-icon icon="mdi:plus"></ha-icon>
-        </button>
-      </div>
-    `;
   }
 }
 
 customElements.define("climate-tile", ClimateTile);
 
 // ============================================================================
-// COVER TILE - with up/stop/down buttons
+// COVER TILE - compact with position display
 // ============================================================================
 
 class CoverTile extends BaseTile {
-  static get styles() {
-    return [
-      super.styles,
-      css`
-        .cover-controls {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 100%;
-          gap: 8px;
-        }
-
-        .cover-button {
-          width: 40px;
-          height: 32px;
-          border-radius: 8px;
-          border: none;
-          background: rgba(255, 255, 255, 0.1);
-          color: var(--primary-text-color, #fff);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: background 0.2s ease;
-        }
-
-        .cover-button:hover {
-          background: rgba(255, 255, 255, 0.2);
-        }
-
-        .cover-button:active {
-          background: rgba(255, 255, 255, 0.3);
-        }
-
-        .cover-button ha-icon {
-          --mdc-icon-size: 18px;
-        }
-      `,
-    ];
-  }
-
   get stateDisplay() {
     if (this.isUnavailable) return "無法使用";
     const state = this.entity?.state;
@@ -690,50 +432,12 @@ class CoverTile extends BaseTile {
     if (state === "closing") return "正在關閉";
     return state;
   }
-
-  handleOpen(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    this.hass.callService("cover", "open_cover", { entity_id: this.entityId });
-  }
-
-  handleStop(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    this.hass.callService("cover", "stop_cover", { entity_id: this.entityId });
-  }
-
-  handleClose(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    this.hass.callService("cover", "close_cover", { entity_id: this.entityId });
-  }
-
-  toggle() {
-    // Override toggle to do nothing - use buttons instead
-  }
-
-  renderControls() {
-    return html`
-      <div class="cover-controls">
-        <button class="cover-button" @click=${this.handleOpen}>
-          <ha-icon icon="mdi:arrow-up"></ha-icon>
-        </button>
-        <button class="cover-button" @click=${this.handleStop}>
-          <ha-icon icon="mdi:stop"></ha-icon>
-        </button>
-        <button class="cover-button" @click=${this.handleClose}>
-          <ha-icon icon="mdi:arrow-down"></ha-icon>
-        </button>
-      </div>
-    `;
-  }
 }
 
 customElements.define("cover-tile", CoverTile);
 
 // ============================================================================
-// FAN TILE - with speed slider
+// FAN TILE - compact with spinning icon
 // ============================================================================
 
 class FanTile extends BaseTile {
@@ -741,48 +445,6 @@ class FanTile extends BaseTile {
     return [
       super.styles,
       css`
-        .slider-container {
-          width: 100%;
-          height: 24px;
-          position: relative;
-        }
-
-        .slider-track {
-          width: 100%;
-          height: 100%;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 12px;
-          overflow: hidden;
-        }
-
-        .slider-fill {
-          height: 100%;
-          background: var(--tile-color, #009688);
-          border-radius: 12px;
-          transition: width 0.1s ease;
-        }
-
-        .slider-input {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          opacity: 0;
-          cursor: pointer;
-          margin: 0;
-        }
-
-        .speed-value {
-          position: absolute;
-          right: 8px;
-          top: 50%;
-          transform: translateY(-50%);
-          font-size: 11px;
-          color: var(--primary-text-color, #fff);
-          pointer-events: none;
-        }
-
         .tile-icon.spinning ha-icon {
           animation: spin 1s linear infinite;
         }
@@ -803,29 +465,6 @@ class FanTile extends BaseTile {
     return "開啟";
   }
 
-  get speedPercent() {
-    return this.entity?.attributes?.percentage || 0;
-  }
-
-  handleSliderChange(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    const value = parseInt(e.target.value);
-
-    if (value === 0) {
-      this.hass.callService("fan", "turn_off", { entity_id: this.entityId });
-    } else {
-      this.hass.callService("fan", "set_percentage", {
-        entity_id: this.entityId,
-        percentage: value,
-      });
-    }
-  }
-
-  handleSliderClick(e) {
-    e.stopPropagation();
-  }
-
   render() {
     const entity = this.entity;
     if (!entity && !this.entityId) return html``;
@@ -840,38 +479,13 @@ class FanTile extends BaseTile {
         @click=${this.handleClick}
         @contextmenu=${this.handleLongPress}
       >
-        <div class="tile-header">
-          <div class="tile-icon ${this.isOn ? "spinning" : ""}">
-            <ha-icon icon=${this.icon}></ha-icon>
-          </div>
-          <div class="tile-info">
-            <div class="tile-name">${entity?.attributes?.friendly_name || this.entityId}</div>
-            <div class="tile-state">${this.stateDisplay}</div>
-          </div>
+        <div class="tile-icon ${this.isOn ? "spinning" : ""}">
+          <ha-icon icon=${this.icon}></ha-icon>
         </div>
-        <div class="tile-controls">${this.renderControls()}</div>
-      </div>
-    `;
-  }
-
-  renderControls() {
-    const percent = this.speedPercent;
-
-    return html`
-      <div class="slider-container" @click=${this.handleSliderClick}>
-        <div class="slider-track">
-          <div class="slider-fill" style="width: ${this.isOn ? percent : 0}%"></div>
+        <div class="tile-info">
+          <div class="tile-name">${entity?.attributes?.friendly_name || this.entityId}</div>
+          <div class="tile-state">${this.stateDisplay}</div>
         </div>
-        <input
-          type="range"
-          class="slider-input"
-          min="0"
-          max="100"
-          .value=${percent}
-          @input=${this.handleSliderChange}
-          @click=${this.handleSliderClick}
-        />
-        ${this.isOn ? html`<span class="speed-value">${percent}%</span>` : ""}
       </div>
     `;
   }
@@ -880,174 +494,30 @@ class FanTile extends BaseTile {
 customElements.define("fan-tile", FanTile);
 
 // ============================================================================
-// MEDIA PLAYER TILE - with playback controls
+// MEDIA PLAYER TILE - compact with status display
 // ============================================================================
 
 class MediaPlayerTile extends BaseTile {
-  static get styles() {
-    return [
-      super.styles,
-      css`
-        .media-controls {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 100%;
-          gap: 4px;
-        }
-
-        .media-button {
-          width: 36px;
-          height: 36px;
-          border-radius: 50%;
-          border: none;
-          background: rgba(255, 255, 255, 0.1);
-          color: var(--primary-text-color, #fff);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: background 0.2s ease;
-        }
-
-        .media-button:hover {
-          background: rgba(255, 255, 255, 0.2);
-        }
-
-        .media-button.play-pause {
-          width: 44px;
-          height: 44px;
-          background: var(--tile-color, #673ab7);
-        }
-
-        .media-button.play-pause:hover {
-          opacity: 0.9;
-        }
-
-        .media-button ha-icon {
-          --mdc-icon-size: 18px;
-        }
-
-        .media-button.play-pause ha-icon {
-          --mdc-icon-size: 22px;
-        }
-      `,
-    ];
-  }
-
   get stateDisplay() {
     if (this.isUnavailable) return "無法使用";
     const state = this.entity?.state;
+    const mediaTitle = this.entity?.attributes?.media_title;
+    if (state === "playing" && mediaTitle) return mediaTitle;
     if (state === "playing") return "播放中";
     if (state === "paused") return "暫停";
     if (state === "idle") return "閒置";
     if (state === "off") return "關閉";
     return state;
   }
-
-  get isPlaying() {
-    return this.entity?.state === "playing";
-  }
-
-  handlePrev(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    this.hass.callService("media_player", "media_previous_track", {
-      entity_id: this.entityId,
-    });
-  }
-
-  handlePlayPause(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    this.hass.callService("media_player", "media_play_pause", {
-      entity_id: this.entityId,
-    });
-  }
-
-  handleNext(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    this.hass.callService("media_player", "media_next_track", {
-      entity_id: this.entityId,
-    });
-  }
-
-  toggle() {
-    if (!this.hass) return;
-    this.hass.callService("media_player", "media_play_pause", {
-      entity_id: this.entityId,
-    });
-  }
-
-  renderControls() {
-    return html`
-      <div class="media-controls">
-        <button class="media-button" @click=${this.handlePrev}>
-          <ha-icon icon="mdi:skip-previous"></ha-icon>
-        </button>
-        <button class="media-button play-pause" @click=${this.handlePlayPause}>
-          <ha-icon icon=${this.isPlaying ? "mdi:pause" : "mdi:play"}></ha-icon>
-        </button>
-        <button class="media-button" @click=${this.handleNext}>
-          <ha-icon icon="mdi:skip-next"></ha-icon>
-        </button>
-      </div>
-    `;
-  }
 }
 
 customElements.define("media-player-tile", MediaPlayerTile);
 
 // ============================================================================
-// LOCK TILE - with lock/unlock buttons
+// LOCK TILE - compact with status display
 // ============================================================================
 
 class LockTile extends BaseTile {
-  static get styles() {
-    return [
-      super.styles,
-      css`
-        .lock-controls {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 100%;
-          gap: 8px;
-        }
-
-        .lock-button {
-          flex: 1;
-          height: 36px;
-          border-radius: 18px;
-          border: none;
-          background: rgba(255, 255, 255, 0.1);
-          color: var(--primary-text-color, #fff);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-          font-size: 12px;
-          transition: background 0.2s ease;
-        }
-
-        .lock-button:hover {
-          background: rgba(255, 255, 255, 0.2);
-        }
-
-        .lock-button.active {
-          background: var(--tile-color, #4caf50);
-          color: #fff;
-        }
-
-        .lock-button ha-icon {
-          --mdc-icon-size: 16px;
-        }
-      `,
-    ];
-  }
-
   get stateDisplay() {
     if (this.isUnavailable) return "無法使用";
     const state = this.entity?.state;
@@ -1057,93 +527,15 @@ class LockTile extends BaseTile {
     if (state === "unlocking") return "解鎖中";
     return state;
   }
-
-  get isLocked() {
-    return this.entity?.state === "locked";
-  }
-
-  handleLock(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    this.hass.callService("lock", "lock", { entity_id: this.entityId });
-  }
-
-  handleUnlock(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    this.hass.callService("lock", "unlock", { entity_id: this.entityId });
-  }
-
-  renderControls() {
-    return html`
-      <div class="lock-controls">
-        <button
-          class="lock-button ${this.isLocked ? "active" : ""}"
-          @click=${this.handleLock}
-        >
-          <ha-icon icon="mdi:lock"></ha-icon>
-          鎖定
-        </button>
-        <button
-          class="lock-button ${!this.isLocked ? "active" : ""}"
-          @click=${this.handleUnlock}
-        >
-          <ha-icon icon="mdi:lock-open"></ha-icon>
-          解鎖
-        </button>
-      </div>
-    `;
-  }
 }
 
 customElements.define("lock-tile", LockTile);
 
 // ============================================================================
-// VACUUM TILE - with start/pause/return buttons
+// VACUUM TILE - compact with status display
 // ============================================================================
 
 class VacuumTile extends BaseTile {
-  static get styles() {
-    return [
-      super.styles,
-      css`
-        .vacuum-controls {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 100%;
-          gap: 8px;
-        }
-
-        .vacuum-button {
-          width: 40px;
-          height: 32px;
-          border-radius: 8px;
-          border: none;
-          background: rgba(255, 255, 255, 0.1);
-          color: var(--primary-text-color, #fff);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: background 0.2s ease;
-        }
-
-        .vacuum-button:hover {
-          background: rgba(255, 255, 255, 0.2);
-        }
-
-        .vacuum-button.active {
-          background: var(--tile-color, #009688);
-        }
-
-        .vacuum-button ha-icon {
-          --mdc-icon-size: 18px;
-        }
-      `,
-    ];
-  }
-
   get stateDisplay() {
     if (this.isUnavailable) return "無法使用";
     const state = this.entity?.state;
@@ -1155,75 +547,16 @@ class VacuumTile extends BaseTile {
     if (state === "error") return "錯誤";
     return state;
   }
-
-  get isCleaning() {
-    return this.entity?.state === "cleaning";
-  }
-
-  handleStart(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    this.hass.callService("vacuum", "start", { entity_id: this.entityId });
-  }
-
-  handlePause(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    this.hass.callService("vacuum", "pause", { entity_id: this.entityId });
-  }
-
-  handleReturn(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    this.hass.callService("vacuum", "return_to_base", { entity_id: this.entityId });
-  }
-
-  renderControls() {
-    return html`
-      <div class="vacuum-controls">
-        <button
-          class="vacuum-button ${this.isCleaning ? "active" : ""}"
-          @click=${this.handleStart}
-        >
-          <ha-icon icon="mdi:play"></ha-icon>
-        </button>
-        <button class="vacuum-button" @click=${this.handlePause}>
-          <ha-icon icon="mdi:pause"></ha-icon>
-        </button>
-        <button class="vacuum-button" @click=${this.handleReturn}>
-          <ha-icon icon="mdi:home"></ha-icon>
-        </button>
-      </div>
-    `;
-  }
 }
 
 customElements.define("vacuum-tile", VacuumTile);
 
 // ============================================================================
-// SCENE TILE - with last triggered time
+// SCENE TILE - compact with last triggered time
 // ============================================================================
 
 class SceneTile extends BaseTile {
-  static get styles() {
-    return [
-      super.styles,
-      css`
-        .scene-info {
-          width: 100%;
-          text-align: center;
-          font-size: 11px;
-          color: var(--secondary-text-color, rgba(255, 255, 255, 0.5));
-        }
-      `,
-    ];
-  }
-
   get stateDisplay() {
-    return "";  // Don't show state for scenes
-  }
-
-  get lastTriggered() {
     const lastChanged = this.entity?.last_changed;
     if (!lastChanged) return "";
 
@@ -1245,15 +578,6 @@ class SceneTile extends BaseTile {
     if (!this.hass) return;
     this.hass.callService("scene", "turn_on", { entity_id: this.entityId });
   }
-
-  renderControls() {
-    const lastTriggered = this.lastTriggered;
-    if (!lastTriggered) return html``;
-
-    return html`
-      <div class="scene-info">${lastTriggered}</div>
-    `;
-  }
 }
 
 customElements.define("scene-tile", SceneTile);
@@ -1269,92 +593,10 @@ class SwitchTile extends BaseTile {
 customElements.define("switch-tile", SwitchTile);
 
 // ============================================================================
-// SENSOR TILE - with mini sparkline chart
+// SENSOR TILE - compact with value display
 // ============================================================================
 
 class SensorTile extends BaseTile {
-  static get properties() {
-    return {
-      ...super.properties,
-      _historyData: { type: Array },
-      _historyLoaded: { type: Boolean },
-    };
-  }
-
-  constructor() {
-    super();
-    this._historyData = [];
-    this._historyLoaded = false;
-  }
-
-  static get styles() {
-    return [
-      super.styles,
-      css`
-        .sparkline-container {
-          width: 100%;
-          height: 32px;
-          margin-top: 4px;
-        }
-
-        .sparkline {
-          width: 100%;
-          height: 100%;
-          display: block;
-        }
-
-        .tile-value {
-          font-size: 20px;
-          font-weight: 500;
-          color: var(--primary-text-color);
-        }
-
-        .tile-unit {
-          font-size: 12px;
-          color: var(--secondary-text-color);
-          margin-left: 2px;
-        }
-      `
-    ];
-  }
-
-  connectedCallback() {
-    super.connectedCallback();
-    // Load history after a short delay to not block initial render
-    if (!this._historyLoaded) {
-      setTimeout(() => this._loadHistory(), 100);
-    }
-  }
-
-  async _loadHistory() {
-    if (!this.hass || !this.entityId || this._historyLoaded) return;
-
-    try {
-      const end = new Date();
-      const start = new Date(end.getTime() - 24 * 60 * 60 * 1000); // 24 hours
-
-      const history = await this.hass.callWS({
-        type: "history/history_during_period",
-        start_time: start.toISOString(),
-        end_time: end.toISOString(),
-        entity_ids: [this.entityId],
-        minimal_response: true,
-        no_attributes: true,
-      });
-
-      if (history && history[this.entityId]) {
-        this._historyData = history[this.entityId]
-          .map(h => parseFloat(h.s))
-          .filter(v => !isNaN(v));
-        this._historyLoaded = true;
-        this.requestUpdate();
-      }
-    } catch (err) {
-      console.debug("Failed to load sensor history:", err);
-      this._historyLoaded = true; // Don't retry on error
-    }
-  }
-
   get stateDisplay() {
     if (this.isUnavailable) return "無法使用";
     const state = this.entity?.state;
@@ -1365,55 +607,6 @@ class SensorTile extends BaseTile {
   toggle() {
     // Sensors don't toggle, open more-info instead
     this.openMoreInfo();
-  }
-
-  renderControls() {
-    if (this._historyData.length < 2) return html``;
-
-    return html`
-      <div class="sparkline-container">
-        <canvas class="sparkline" ${ref(this._renderSparkline)}></canvas>
-      </div>
-    `;
-  }
-
-  _renderSparkline = (canvas) => {
-    if (!canvas || this._historyData.length < 2) return;
-
-    // Set canvas size based on container
-    const rect = canvas.parentElement?.getBoundingClientRect();
-    if (rect) {
-      canvas.width = rect.width * (window.devicePixelRatio || 1);
-      canvas.height = rect.height * (window.devicePixelRatio || 1);
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
-    }
-
-    const ctx = canvas.getContext('2d');
-    const data = this._historyData;
-    const w = canvas.width;
-    const h = canvas.height;
-
-    const min = Math.min(...data);
-    const max = Math.max(...data);
-    const range = max - min || 1;
-
-    ctx.clearRect(0, 0, w, h);
-    ctx.beginPath();
-    ctx.strokeStyle = this.tileColor;
-    ctx.lineWidth = 2 * (window.devicePixelRatio || 1);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    const padding = 2 * (window.devicePixelRatio || 1);
-    data.forEach((val, i) => {
-      const x = (i / (data.length - 1)) * w;
-      const y = h - padding - ((val - min) / range) * (h - padding * 2);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-
-    ctx.stroke();
   }
 }
 
@@ -1488,108 +681,16 @@ class AutomationTile extends SceneTile {
 customElements.define("automation-tile", AutomationTile);
 
 // ============================================================================
-// HUMIDIFIER TILE - with humidity slider
+// HUMIDIFIER TILE - compact with humidity display
 // ============================================================================
 
 class HumidifierTile extends BaseTile {
-  static get styles() {
-    return [
-      super.styles,
-      css`
-        .slider-container {
-          width: 100%;
-          height: 24px;
-          position: relative;
-        }
-
-        .slider-track {
-          width: 100%;
-          height: 100%;
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 12px;
-          overflow: hidden;
-        }
-
-        .slider-fill {
-          height: 100%;
-          background: var(--tile-color, #00bcd4);
-          border-radius: 12px;
-          transition: width 0.1s ease;
-        }
-
-        .slider-input {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          opacity: 0;
-          cursor: pointer;
-          margin: 0;
-        }
-
-        .humidity-value {
-          position: absolute;
-          right: 8px;
-          top: 50%;
-          transform: translateY(-50%);
-          font-size: 11px;
-          color: var(--primary-text-color, #fff);
-          pointer-events: none;
-        }
-      `,
-    ];
-  }
-
   get stateDisplay() {
     if (this.isUnavailable) return "無法使用";
     if (!this.isOn) return "關閉";
     const humidity = this.entity?.attributes?.humidity;
     if (humidity) return `${humidity}%`;
     return "開啟";
-  }
-
-  get humidityPercent() {
-    return this.entity?.attributes?.humidity || 0;
-  }
-
-  handleSliderChange(e) {
-    e.stopPropagation();
-    if (!this.hass) return;
-    const value = parseInt(e.target.value);
-
-    this.hass.callService("humidifier", "set_humidity", {
-      entity_id: this.entityId,
-      humidity: value,
-    });
-  }
-
-  handleSliderClick(e) {
-    e.stopPropagation();
-  }
-
-  renderControls() {
-    if (!this.isOn) return html``;
-
-    const percent = this.humidityPercent;
-
-    return html`
-      <div class="slider-container" @click=${this.handleSliderClick}>
-        <div class="slider-track">
-          <div class="slider-fill" style="width: ${percent}%"></div>
-        </div>
-        <input
-          type="range"
-          class="slider-input"
-          min="0"
-          max="100"
-          .value=${percent}
-          @input=${this.handleSliderChange}
-          @click=${this.handleSliderClick}
-        />
-        <span class="humidity-value">${percent}%</span>
-      </div>
-    `;
   }
 }
 
@@ -1867,14 +968,24 @@ class DomainTabs extends LitElement {
     }));
   }
 
+  _getIcon(domain) {
+    if (domain === 'all') return 'mdi:view-grid';
+    return DOMAIN_ICONS[domain] || 'mdi:help';
+  }
+
+  _getLabel(domain) {
+    if (domain === 'all') return '全部';
+    return DOMAIN_LABELS[domain] || domain;
+  }
+
   render() {
     return html`
       <div class="tabs-container">
         ${this.domains?.map(d => html`
           <button class="domain-tab ${d.domain === this.selectedDomain ? 'active' : ''}"
                   @click=${() => this._handleTabClick(d.domain)}>
-            <ha-icon class="tab-icon" icon=${DOMAIN_ICONS[d.domain] || 'mdi:help'}></ha-icon>
-            <span>${DOMAIN_LABELS[d.domain] || d.domain}</span>
+            <ha-icon class="tab-icon" icon=${this._getIcon(d.domain)}></ha-icon>
+            <span>${this._getLabel(d.domain)}</span>
             <span class="tab-count">${d.count}</span>
           </button>
         `)}
@@ -2362,6 +1473,44 @@ class HaAreaControlPanel extends LitElement {
         }
       }
 
+      /* Domain Section Header - for area view */
+      .domain-section-header {
+        display: flex;
+        align-items: center;
+        padding: 12px 4px;
+        margin-top: 8px;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .domain-section-header:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+      }
+
+      .domain-section-header .section-icon {
+        --mdc-icon-size: 20px;
+        margin-right: 8px;
+        color: var(--primary-text-color, #fff);
+      }
+
+      .domain-section-header .section-label {
+        flex: 1;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--primary-text-color, #fff);
+      }
+
+      .domain-section-header .section-arrow {
+        --mdc-icon-size: 20px;
+        color: var(--secondary-text-color, rgba(255, 255, 255, 0.7));
+        transition: transform 0.2s ease;
+      }
+
+      .domain-section-header .section-arrow.collapsed {
+        transform: rotate(-90deg);
+      }
+
       /* Tiles Grid - for area view with domain tabs */
       .tiles-grid {
         display: grid;
@@ -2743,11 +1892,35 @@ class HaAreaControlPanel extends LitElement {
       };
     }).filter(d => d.count > 0 || !this._searchQuery);  // Hide empty domains when searching
 
-    // Use selected domain or default to first with entities
-    const selectedDomain = this._selectedAreaDomain && domainData.find(d => d.domain === this._selectedAreaDomain)
+    // Calculate total entities for "All" tab
+    const allEntities = [];
+    for (const d of domainData) {
+      allEntities.push(...d.entities);
+    }
+
+    // Add "all" as first entry
+    const domainDataWithAll = [
+      { domain: 'all', entities: allEntities, count: allEntities.length },
+      ...domainData
+    ];
+
+    // Use selected domain or default to "all"
+    const selectedDomain = this._selectedAreaDomain && domainDataWithAll.find(d => d.domain === this._selectedAreaDomain)
       ? this._selectedAreaDomain
-      : domainData[0]?.domain;
-    const selectedEntities = this._filterEntities(entities[selectedDomain] || [], this._searchQuery);
+      : 'all';
+
+    // Get entities to display based on selected domain
+    let selectedEntities;
+    if (selectedDomain === 'all') {
+      selectedEntities = allEntities;
+    } else {
+      selectedEntities = this._filterEntities(entities[selectedDomain] || [], this._searchQuery);
+    }
+
+    // Get display info for section header
+    const selectedDomainData = domainDataWithAll.find(d => d.domain === selectedDomain);
+    const sectionIcon = selectedDomain === 'all' ? 'mdi:view-grid' : (DOMAIN_ICONS[selectedDomain] || 'mdi:help-circle');
+    const sectionLabel = selectedDomain === 'all' ? '全部' : (DOMAIN_LABELS[selectedDomain] || selectedDomain);
 
     return html`
       <search-bar
@@ -2757,14 +1930,26 @@ class HaAreaControlPanel extends LitElement {
       ></search-bar>
       <domain-tabs
         .hass=${this.hass}
-        .domains=${domainData}
+        .domains=${domainDataWithAll}
         .selectedDomain=${selectedDomain}
         @domain-tab-selected=${this._handleAreaDomainTabSelected}
       ></domain-tabs>
+      <div class="domain-section-header" @click=${this._toggleDomainExpanded}>
+        <ha-icon class="section-icon" icon=${sectionIcon}></ha-icon>
+        <span class="section-label">${sectionLabel}</span>
+        <ha-icon class="section-arrow" icon="mdi:chevron-down"></ha-icon>
+      </div>
       <div class="tiles-grid">
-        ${selectedEntities.map(entityId => this._renderTileByDomain(entityId, selectedDomain))}
+        ${selectedEntities.map(entityId => {
+          const domain = entityId.split('.')[0];
+          return this._renderTileByDomain(entityId, domain);
+        })}
       </div>
     `;
+  }
+
+  _toggleDomainExpanded() {
+    // Placeholder for future expand/collapse functionality
   }
 
   _renderTileByDomain(entityId, domain) {
