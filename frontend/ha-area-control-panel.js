@@ -6,6 +6,9 @@
 const { LitElement, html, css } = await import(
   "https://cdn.jsdelivr.net/npm/lit@3.1.0/+esm"
 );
+const { ref } = await import(
+  "https://cdn.jsdelivr.net/npm/lit@3.1.0/directives/ref.js/+esm"
+);
 
 // ============================================================================
 // DESIGN TOKENS - HA Native Style
@@ -123,7 +126,9 @@ class BaseTile extends LitElement {
         background: var(--tile-bg, rgba(255, 255, 255, 0.05));
         border-radius: 12px;
         padding: 12px;
-        min-height: 120px;
+        height: 140px;
+        width: 100%;
+        box-sizing: border-box;
         display: flex;
         flex-direction: column;
         cursor: pointer;
@@ -179,6 +184,7 @@ class BaseTile extends LitElement {
       .tile-info {
         flex: 1;
         min-width: 0;
+        overflow: hidden;
       }
 
       .tile-name {
@@ -188,6 +194,7 @@ class BaseTile extends LitElement {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        max-width: 100%;
       }
 
       .tile-state {
@@ -1262,10 +1269,92 @@ class SwitchTile extends BaseTile {
 customElements.define("switch-tile", SwitchTile);
 
 // ============================================================================
-// SENSOR TILE - display only
+// SENSOR TILE - with mini sparkline chart
 // ============================================================================
 
 class SensorTile extends BaseTile {
+  static get properties() {
+    return {
+      ...super.properties,
+      _historyData: { type: Array },
+      _historyLoaded: { type: Boolean },
+    };
+  }
+
+  constructor() {
+    super();
+    this._historyData = [];
+    this._historyLoaded = false;
+  }
+
+  static get styles() {
+    return [
+      super.styles,
+      css`
+        .sparkline-container {
+          width: 100%;
+          height: 32px;
+          margin-top: 4px;
+        }
+
+        .sparkline {
+          width: 100%;
+          height: 100%;
+          display: block;
+        }
+
+        .tile-value {
+          font-size: 20px;
+          font-weight: 500;
+          color: var(--primary-text-color);
+        }
+
+        .tile-unit {
+          font-size: 12px;
+          color: var(--secondary-text-color);
+          margin-left: 2px;
+        }
+      `
+    ];
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    // Load history after a short delay to not block initial render
+    if (!this._historyLoaded) {
+      setTimeout(() => this._loadHistory(), 100);
+    }
+  }
+
+  async _loadHistory() {
+    if (!this.hass || !this.entityId || this._historyLoaded) return;
+
+    try {
+      const end = new Date();
+      const start = new Date(end.getTime() - 24 * 60 * 60 * 1000); // 24 hours
+
+      const history = await this.hass.callWS({
+        type: "history/history_during_period",
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+        entity_ids: [this.entityId],
+        minimal_response: true,
+        no_attributes: true,
+      });
+
+      if (history && history[this.entityId]) {
+        this._historyData = history[this.entityId]
+          .map(h => parseFloat(h.s))
+          .filter(v => !isNaN(v));
+        this._historyLoaded = true;
+        this.requestUpdate();
+      }
+    } catch (err) {
+      console.debug("Failed to load sensor history:", err);
+      this._historyLoaded = true; // Don't retry on error
+    }
+  }
+
   get stateDisplay() {
     if (this.isUnavailable) return "無法使用";
     const state = this.entity?.state;
@@ -1276,6 +1365,55 @@ class SensorTile extends BaseTile {
   toggle() {
     // Sensors don't toggle, open more-info instead
     this.openMoreInfo();
+  }
+
+  renderControls() {
+    if (this._historyData.length < 2) return html``;
+
+    return html`
+      <div class="sparkline-container">
+        <canvas class="sparkline" ${ref(this._renderSparkline)}></canvas>
+      </div>
+    `;
+  }
+
+  _renderSparkline = (canvas) => {
+    if (!canvas || this._historyData.length < 2) return;
+
+    // Set canvas size based on container
+    const rect = canvas.parentElement?.getBoundingClientRect();
+    if (rect) {
+      canvas.width = rect.width * (window.devicePixelRatio || 1);
+      canvas.height = rect.height * (window.devicePixelRatio || 1);
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
+    }
+
+    const ctx = canvas.getContext('2d');
+    const data = this._historyData;
+    const w = canvas.width;
+    const h = canvas.height;
+
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min || 1;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.beginPath();
+    ctx.strokeStyle = this.tileColor;
+    ctx.lineWidth = 2 * (window.devicePixelRatio || 1);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    const padding = 2 * (window.devicePixelRatio || 1);
+    data.forEach((val, i) => {
+      const x = (i / (data.length - 1)) * w;
+      const y = h - padding - ((val - min) / range) * (h - padding * 2);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+
+    ctx.stroke();
   }
 }
 
@@ -1570,20 +1708,20 @@ class DomainSection extends LitElement {
 
       .tiles-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
         padding-top: 8px;
       }
 
       @media (min-width: 600px) {
         .tiles-grid {
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
       }
 
       @media (min-width: 1024px) {
         .tiles-grid {
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(4, minmax(0, 1fr));
         }
       }
 
@@ -1661,6 +1799,190 @@ class DomainSection extends LitElement {
 }
 
 customElements.define("ac-domain-section", DomainSection);
+
+// ============================================================================
+// DOMAIN TABS COMPONENT - Horizontal scrollable domain selector
+// ============================================================================
+
+class DomainTabs extends LitElement {
+  static get properties() {
+    return {
+      hass: { type: Object },
+      domains: { type: Array },        // [{domain, entities, count}]
+      selectedDomain: { type: String },
+    };
+  }
+
+  static get styles() {
+    return css`
+      :host { display: block; }
+
+      .tabs-container {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 8px 0;
+        scrollbar-width: none;
+      }
+      .tabs-container::-webkit-scrollbar { display: none; }
+
+      .domain-tab {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all 0.2s;
+        border: none;
+        color: var(--primary-text-color);
+        font-size: 13px;
+      }
+
+      .domain-tab:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .domain-tab.active {
+        background: var(--primary-color);
+        color: var(--text-primary-color-on-primary, #fff);
+      }
+
+      .tab-icon { --mdc-icon-size: 18px; }
+      .tab-count {
+        font-size: 11px;
+        background: rgba(0,0,0,0.2);
+        padding: 2px 6px;
+        border-radius: 10px;
+      }
+    `;
+  }
+
+  _handleTabClick(domain) {
+    this.dispatchEvent(new CustomEvent('domain-tab-selected', {
+      bubbles: true, composed: true,
+      detail: { domain }
+    }));
+  }
+
+  render() {
+    return html`
+      <div class="tabs-container">
+        ${this.domains?.map(d => html`
+          <button class="domain-tab ${d.domain === this.selectedDomain ? 'active' : ''}"
+                  @click=${() => this._handleTabClick(d.domain)}>
+            <ha-icon class="tab-icon" icon=${DOMAIN_ICONS[d.domain] || 'mdi:help'}></ha-icon>
+            <span>${DOMAIN_LABELS[d.domain] || d.domain}</span>
+            <span class="tab-count">${d.count}</span>
+          </button>
+        `)}
+      </div>
+    `;
+  }
+}
+
+customElements.define("domain-tabs", DomainTabs);
+
+// ============================================================================
+// SEARCH BAR COMPONENT
+// ============================================================================
+
+class SearchBar extends LitElement {
+  static get properties() {
+    return {
+      value: { type: String },
+      placeholder: { type: String },
+    };
+  }
+
+  static get styles() {
+    return css`
+      :host { display: block; margin-bottom: 16px; }
+
+      .search-container {
+        display: flex;
+        align-items: center;
+        background: var(--card-background-color, rgba(255,255,255,0.05));
+        border-radius: 28px;
+        padding: 0 16px;
+        height: 48px;
+        border: 1px solid var(--divider-color, rgba(255,255,255,0.1));
+      }
+
+      .search-container:focus-within {
+        border-color: var(--primary-color);
+      }
+
+      .search-icon {
+        color: var(--secondary-text-color);
+        --mdc-icon-size: 20px;
+        margin-right: 12px;
+      }
+
+      input {
+        flex: 1;
+        border: none;
+        background: transparent;
+        font-size: 14px;
+        color: var(--primary-text-color);
+        outline: none;
+      }
+
+      input::placeholder {
+        color: var(--secondary-text-color);
+      }
+
+      .clear-btn {
+        background: none;
+        border: none;
+        color: var(--secondary-text-color);
+        cursor: pointer;
+        padding: 4px;
+        display: flex;
+        --mdc-icon-size: 18px;
+      }
+
+      .clear-btn:hover {
+        color: var(--primary-text-color);
+      }
+    `;
+  }
+
+  _handleInput(e) {
+    this.dispatchEvent(new CustomEvent('search-changed', {
+      bubbles: true, composed: true,
+      detail: { value: e.target.value }
+    }));
+  }
+
+  _handleClear() {
+    this.dispatchEvent(new CustomEvent('search-changed', {
+      bubbles: true, composed: true,
+      detail: { value: '' }
+    }));
+  }
+
+  render() {
+    return html`
+      <div class="search-container">
+        <ha-icon class="search-icon" icon="mdi:magnify"></ha-icon>
+        <input type="text"
+               .value=${this.value || ''}
+               placeholder=${this.placeholder || '搜尋...'}
+               @input=${this._handleInput}>
+        ${this.value ? html`
+          <button class="clear-btn" @click=${this._handleClear}>
+            <ha-icon icon="mdi:close"></ha-icon>
+          </button>
+        ` : ''}
+      </div>
+    `;
+  }
+}
+
+customElements.define("search-bar", SearchBar);
 
 // ============================================================================
 // DOMAIN SUMMARY COMPONENT
@@ -1885,10 +2207,12 @@ class HaAreaControlPanel extends LitElement {
       _view: { type: String },
       _selectedAreaId: { type: String },
       _selectedDomain: { type: String },
+      _selectedAreaDomain: { type: String },  // Domain selected within area view
       _areas: { type: Array },
       _areaEntities: { type: Object },
       _loading: { type: Boolean },
       _loadError: { type: String },
+      _searchQuery: { type: String },
     };
   }
 
@@ -1897,11 +2221,13 @@ class HaAreaControlPanel extends LitElement {
     this._view = "home";
     this._selectedAreaId = null;
     this._selectedDomain = null;
+    this._selectedAreaDomain = null;  // Domain selected within area view
     this._areas = [];
     this._areaEntities = {};
     this._loading = true;
     this._areasLoading = false;
     this._loadError = null;
+    this._searchQuery = "";
     // Memoization cache for domain counts
     this._cachedDomainCounts = null;
     this._lastHassStatesRef = null;
@@ -2033,6 +2359,26 @@ class HaAreaControlPanel extends LitElement {
       @media (min-width: 1024px) {
         .areas-grid {
           grid-template-columns: repeat(4, 1fr);
+        }
+      }
+
+      /* Tiles Grid - for area view with domain tabs */
+      .tiles-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        padding-top: 8px;
+      }
+
+      @media (min-width: 600px) {
+        .tiles-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      @media (min-width: 1024px) {
+        .tiles-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
         }
       }
 
@@ -2230,6 +2576,26 @@ class HaAreaControlPanel extends LitElement {
     this._view = "home";
     this._selectedAreaId = null;
     this._selectedDomain = null;
+    this._selectedAreaDomain = null;
+    this._searchQuery = "";
+  }
+
+  _handleAreaDomainTabSelected(e) {
+    this._selectedAreaDomain = e.detail.domain;
+  }
+
+  _handleSearchChanged(e) {
+    this._searchQuery = e.detail.value;
+  }
+
+  _filterEntities(entities, query) {
+    if (!query) return entities;
+    const q = query.toLowerCase();
+    return entities.filter(entityId => {
+      const entity = this.hass?.states?.[entityId];
+      const name = entity?.attributes?.friendly_name || entityId;
+      return name.toLowerCase().includes(q) || entityId.toLowerCase().includes(q);
+    });
   }
 
   _getSelectedArea() {
@@ -2367,17 +2733,76 @@ class HaAreaControlPanel extends LitElement {
       return aIdx - bIdx;
     });
 
+    // Build domain data with counts (filtered if search is active)
+    const domainData = domains.map(d => {
+      const filtered = this._filterEntities(entities[d] || [], this._searchQuery);
+      return {
+        domain: d,
+        entities: filtered,
+        count: filtered.length
+      };
+    }).filter(d => d.count > 0 || !this._searchQuery);  // Hide empty domains when searching
+
+    // Use selected domain or default to first with entities
+    const selectedDomain = this._selectedAreaDomain && domainData.find(d => d.domain === this._selectedAreaDomain)
+      ? this._selectedAreaDomain
+      : domainData[0]?.domain;
+    const selectedEntities = this._filterEntities(entities[selectedDomain] || [], this._searchQuery);
+
     return html`
-      ${domains.map(
-        (domain) => html`
-          <ac-domain-section
-            .hass=${this.hass}
-            .domain=${domain}
-            .entities=${entities[domain]}
-          ></ac-domain-section>
-        `
-      )}
+      <search-bar
+        .value=${this._searchQuery}
+        placeholder="搜尋裝置..."
+        @search-changed=${this._handleSearchChanged}
+      ></search-bar>
+      <domain-tabs
+        .hass=${this.hass}
+        .domains=${domainData}
+        .selectedDomain=${selectedDomain}
+        @domain-tab-selected=${this._handleAreaDomainTabSelected}
+      ></domain-tabs>
+      <div class="tiles-grid">
+        ${selectedEntities.map(entityId => this._renderTileByDomain(entityId, selectedDomain))}
+      </div>
     `;
+  }
+
+  _renderTileByDomain(entityId, domain) {
+    switch (domain) {
+      case "light":
+        return html`<light-tile .hass=${this.hass} entity-id=${entityId}></light-tile>`;
+      case "climate":
+        return html`<climate-tile .hass=${this.hass} entity-id=${entityId}></climate-tile>`;
+      case "cover":
+        return html`<cover-tile .hass=${this.hass} entity-id=${entityId}></cover-tile>`;
+      case "fan":
+        return html`<fan-tile .hass=${this.hass} entity-id=${entityId}></fan-tile>`;
+      case "media_player":
+        return html`<media-player-tile .hass=${this.hass} entity-id=${entityId}></media-player-tile>`;
+      case "lock":
+        return html`<lock-tile .hass=${this.hass} entity-id=${entityId}></lock-tile>`;
+      case "vacuum":
+        return html`<vacuum-tile .hass=${this.hass} entity-id=${entityId}></vacuum-tile>`;
+      case "scene":
+        return html`<scene-tile .hass=${this.hass} entity-id=${entityId}></scene-tile>`;
+      case "script":
+        return html`<script-tile .hass=${this.hass} entity-id=${entityId}></script-tile>`;
+      case "automation":
+        return html`<automation-tile .hass=${this.hass} entity-id=${entityId}></automation-tile>`;
+      case "switch":
+      case "input_boolean":
+        return html`<switch-tile .hass=${this.hass} entity-id=${entityId}></switch-tile>`;
+      case "sensor":
+        return html`<sensor-tile .hass=${this.hass} entity-id=${entityId}></sensor-tile>`;
+      case "binary_sensor":
+        return html`<binary-sensor-tile .hass=${this.hass} entity-id=${entityId}></binary-sensor-tile>`;
+      case "button":
+        return html`<button-tile .hass=${this.hass} entity-id=${entityId}></button-tile>`;
+      case "humidifier":
+        return html`<humidifier-tile .hass=${this.hass} entity-id=${entityId}></humidifier-tile>`;
+      default:
+        return html`<base-tile .hass=${this.hass} entity-id=${entityId}></base-tile>`;
+    }
   }
 
   _renderDomainView() {
