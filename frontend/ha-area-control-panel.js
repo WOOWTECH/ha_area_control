@@ -122,8 +122,9 @@ class BaseTile extends LitElement {
       .tile {
         background: var(--tile-bg, rgba(255, 255, 255, 0.05));
         border-radius: 12px;
-        padding: 20px 16px;
-        height: 100px;
+        padding: 12px 16px;
+        min-height: 56px;
+        height: auto;
         width: 100%;
         box-sizing: border-box;
         display: flex;
@@ -186,9 +187,12 @@ class BaseTile extends LitElement {
         font-size: 14px;
         font-weight: 500;
         color: var(--primary-text-color, #fff);
-        white-space: nowrap;
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
         overflow: hidden;
-        text-overflow: ellipsis;
+        line-height: 1.3;
         max-width: 100%;
       }
 
@@ -769,7 +773,7 @@ class DomainSection extends LitElement {
         width: 24px;
         height: 24px;
         margin-right: 8px;
-        color: var(--primary-text-color, #fff);
+        color: var(--secondary-text-color);
       }
 
       .section-icon ha-icon {
@@ -780,18 +784,7 @@ class DomainSection extends LitElement {
         flex: 1;
         font-size: 14px;
         font-weight: 500;
-        color: var(--primary-text-color, #fff);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
-      .section-count {
-        font-size: 12px;
-        color: var(--secondary-text-color, rgba(255, 255, 255, 0.7));
-        margin-right: 8px;
-        background: rgba(255, 255, 255, 0.1);
-        padding: 2px 8px;
-        border-radius: 10px;
+        color: var(--primary-text-color);
       }
 
       .section-arrow {
@@ -839,7 +832,6 @@ class DomainSection extends LitElement {
   render() {
     const icon = DOMAIN_ICONS[this.domain] || "mdi:help-circle";
     const label = DOMAIN_LABELS[this.domain] || this.domain;
-    const count = this.entities?.length || 0;
 
     return html`
       <div class="section-header" @click=${this.toggleExpanded}>
@@ -847,7 +839,6 @@ class DomainSection extends LitElement {
           <ha-icon icon=${icon}></ha-icon>
         </div>
         <div class="section-title">${label}</div>
-        <div class="section-count">${count}</div>
         <div class="section-arrow ${this.expanded ? "" : "collapsed"}">
           <ha-icon icon="mdi:chevron-down"></ha-icon>
         </div>
@@ -1871,15 +1862,12 @@ class HaAreaControlPanel extends LitElement {
 
   _renderAreaView() {
     const entities = this._areaEntities[this._selectedAreaId] || {};
+
+    // Sort domains by entity count (descending) - most entities first
     const domains = Object.keys(entities).sort((a, b) => {
-      // Sort by priority: lights first, then climate, etc.
-      const priority = ["light", "climate", "cover", "fan", "media_player", "scene"];
-      const aIdx = priority.indexOf(a);
-      const bIdx = priority.indexOf(b);
-      if (aIdx === -1 && bIdx === -1) return a.localeCompare(b);
-      if (aIdx === -1) return 1;
-      if (bIdx === -1) return -1;
-      return aIdx - bIdx;
+      const countA = entities[a]?.length || 0;
+      const countB = entities[b]?.length || 0;
+      return countB - countA;
     });
 
     // Build domain data with counts (filtered if search is active)
@@ -1909,18 +1897,34 @@ class HaAreaControlPanel extends LitElement {
       ? this._selectedAreaDomain
       : 'all';
 
-    // Get entities to display based on selected domain
-    let selectedEntities;
+    // Render grouped view for "all", single domain view for specific domain
     if (selectedDomain === 'all') {
-      selectedEntities = allEntities;
-    } else {
-      selectedEntities = this._filterEntities(entities[selectedDomain] || [], this._searchQuery);
+      return html`
+        <search-bar
+          .value=${this._searchQuery}
+          placeholder="搜尋裝置..."
+          @search-changed=${this._handleSearchChanged}
+        ></search-bar>
+        <domain-tabs
+          .hass=${this.hass}
+          .domains=${domainDataWithAll}
+          .selectedDomain=${selectedDomain}
+          @domain-tab-selected=${this._handleAreaDomainTabSelected}
+        ></domain-tabs>
+        ${domainData.map(d => html`
+          <ac-domain-section
+            .hass=${this.hass}
+            .domain=${d.domain}
+            .entities=${d.entities}
+          ></ac-domain-section>
+        `)}
+      `;
     }
 
-    // Get display info for section header
-    const selectedDomainData = domainDataWithAll.find(d => d.domain === selectedDomain);
-    const sectionIcon = selectedDomain === 'all' ? 'mdi:view-grid' : (DOMAIN_ICONS[selectedDomain] || 'mdi:help-circle');
-    const sectionLabel = selectedDomain === 'all' ? '全部' : (DOMAIN_LABELS[selectedDomain] || selectedDomain);
+    // Single domain view
+    const selectedEntities = this._filterEntities(entities[selectedDomain] || [], this._searchQuery);
+    const sectionIcon = DOMAIN_ICONS[selectedDomain] || 'mdi:help-circle';
+    const sectionLabel = DOMAIN_LABELS[selectedDomain] || selectedDomain;
 
     return html`
       <search-bar
