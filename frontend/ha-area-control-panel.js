@@ -1,11 +1,190 @@
 // Home Assistant Native Style - Area Control Panel
 // Matches HA Home Dashboard design with tall tiles and embedded controls
 
-// Use jsDelivr CDN (faster than unpkg, with proper caching)
-// Direct import without fallback to avoid 404 delay
+// Local Lit bundle (no CDN dependency for offline/intranet environments)
 const { LitElement, html, css } = await import(
-  "https://cdn.jsdelivr.net/npm/lit@3.1.0/+esm"
+  "/ha_area_control/lit.js"
 );
+
+// ============================================================================
+// I18N TRANSLATIONS
+// ============================================================================
+
+const TRANSLATIONS = {
+  en: {
+    title: "Area Control",
+    summary: "Summary",
+    areas: "Areas",
+    loading: "Loading...",
+    retry: "Retry",
+    on: "on",
+    off: "Off",
+    unavailable: "Unavailable",
+    opened: "Open",
+    closed: "Closed",
+    opening: "Opening",
+    closing: "Closing",
+    locked: "Locked",
+    unlocked: "Unlocked",
+    locking: "Locking",
+    unlocking: "Unlocking",
+    playing: "Playing",
+    paused: "Paused",
+    idle: "Idle",
+    cleaning: "Cleaning",
+    docked: "Charging",
+    returning: "Returning",
+    error: "Error",
+    enabled: "Enabled",
+    disabled: "Disabled",
+    detected: "Detected",
+    clear: "Clear",
+    occupied: "Occupied",
+    notOccupied: "Not occupied",
+    justNow: "Just now",
+    minutesAgo: "min ago",
+    hoursAgo: "hr ago",
+    daysAgo: "days ago",
+    searchPlaceholder: "Search devices...",
+    all: "All",
+    back: "Back",
+    openSidebar: "Open sidebar",
+    entities: "entities",
+  },
+  "zh-Hant": {
+    title: "分區控制",
+    summary: "摘要",
+    areas: "分區",
+    loading: "載入中...",
+    retry: "重試",
+    on: "開啟",
+    off: "關閉",
+    unavailable: "無法使用",
+    opened: "開啟",
+    closed: "關閉",
+    opening: "正在開啟",
+    closing: "正在關閉",
+    locked: "已鎖定",
+    unlocked: "已解鎖",
+    locking: "鎖定中",
+    unlocking: "解鎖中",
+    playing: "播放中",
+    paused: "暫停",
+    idle: "閒置",
+    cleaning: "清掃中",
+    docked: "充電中",
+    returning: "返回中",
+    error: "錯誤",
+    enabled: "啟用",
+    disabled: "停用",
+    detected: "偵測到",
+    clear: "無動作",
+    occupied: "有人",
+    notOccupied: "無人",
+    justNow: "剛剛",
+    minutesAgo: "分鐘前",
+    hoursAgo: "小時前",
+    daysAgo: "天前",
+    searchPlaceholder: "搜尋裝置...",
+    all: "全部",
+    back: "返回",
+    openSidebar: "開啟側邊欄",
+    entities: "個實體",
+  },
+  "zh-Hans": {
+    title: "分区控制",
+    summary: "摘要",
+    areas: "分区",
+    loading: "加载中...",
+    retry: "重试",
+    on: "开启",
+    off: "关闭",
+    unavailable: "无法使用",
+    opened: "开启",
+    closed: "关闭",
+    opening: "正在开启",
+    closing: "正在关闭",
+    locked: "已锁定",
+    unlocked: "已解锁",
+    locking: "锁定中",
+    unlocking: "解锁中",
+    playing: "播放中",
+    paused: "暂停",
+    idle: "闲置",
+    cleaning: "清扫中",
+    docked: "充电中",
+    returning: "返回中",
+    error: "错误",
+    enabled: "启用",
+    disabled: "停用",
+    detected: "检测到",
+    clear: "无动作",
+    occupied: "有人",
+    notOccupied: "无人",
+    justNow: "刚刚",
+    minutesAgo: "分钟前",
+    hoursAgo: "小时前",
+    daysAgo: "天前",
+    searchPlaceholder: "搜索设备...",
+    all: "全部",
+    back: "返回",
+    openSidebar: "打开侧边栏",
+    entities: "个实体",
+  },
+};
+
+const DOMAIN_NAMES = {
+  en: {
+    light: "Lights", switch: "Switches", climate: "Climate", cover: "Covers",
+    fan: "Fans", media_player: "Media", vacuum: "Vacuums", lock: "Locks",
+    humidifier: "Humidifiers", automation: "Automations", script: "Scripts",
+    scene: "Scenes", button: "Buttons", sensor: "Sensors",
+    binary_sensor: "Binary Sensors", input_boolean: "Input Boolean",
+    person: "Persons",
+  },
+  "zh-Hant": {
+    light: "燈光", switch: "開關", climate: "溫控", cover: "窗簾",
+    fan: "風扇", media_player: "媒體播放器", vacuum: "掃地機", lock: "門鎖",
+    humidifier: "加濕器", automation: "自動化", script: "腳本",
+    scene: "場景", button: "按鈕", sensor: "感測器",
+    binary_sensor: "二元感測器", input_boolean: "輔助開關",
+    person: "人員",
+  },
+  "zh-Hans": {
+    light: "灯光", switch: "开关", climate: "温控", cover: "窗帘",
+    fan: "风扇", media_player: "媒体播放器", vacuum: "扫地机", lock: "门锁",
+    humidifier: "加湿器", automation: "自动化", script: "脚本",
+    scene: "场景", button: "按钮", sensor: "传感器",
+    binary_sensor: "二元传感器", input_boolean: "辅助开关",
+    person: "人员",
+  },
+};
+
+/**
+ * Get the best language key for TRANSLATIONS/DOMAIN_NAMES lookup.
+ * Falls back: zh-Hant -> zh-Hant, zh-TW -> zh-Hant, zh-CN -> zh-Hans, zh -> zh-Hant, * -> en
+ */
+function _getLangKey(hass) {
+  const lang = hass?.language || "en";
+  if (TRANSLATIONS[lang]) return lang;
+  if (lang.startsWith("zh")) {
+    if (lang === "zh-Hans" || lang === "zh-CN") return "zh-Hans";
+    return "zh-Hant"; // zh-TW, zh, etc.
+  }
+  return "en";
+}
+
+/** Translation helper usable from any context with hass */
+function _t(hass, key) {
+  const langKey = _getLangKey(hass);
+  return TRANSLATIONS[langKey][key] || TRANSLATIONS["en"][key] || key;
+}
+
+/** Domain name helper */
+function _domainName(hass, domain) {
+  const langKey = _getLangKey(hass);
+  return (DOMAIN_NAMES[langKey] && DOMAIN_NAMES[langKey][domain]) || DOMAIN_NAMES["en"][domain] || domain;
+}
 
 // ============================================================================
 // DESIGN TOKENS - HA Native Style
@@ -54,25 +233,7 @@ const DOMAIN_ICONS = {
   person: "mdi:account",
 };
 
-const DOMAIN_LABELS = {
-  light: "燈光",
-  switch: "開關",
-  input_boolean: "輔助開關",
-  fan: "風扇",
-  climate: "溫控",
-  cover: "窗簾",
-  lock: "門鎖",
-  vacuum: "掃地機",
-  media_player: "媒體播放器",
-  humidifier: "加濕器",
-  automation: "自動化",
-  script: "腳本",
-  scene: "場景",
-  sensor: "感測器",
-  binary_sensor: "二元感測器",
-  button: "按鈕",
-  person: "人員",
-};
+// DOMAIN_LABELS removed — use _domainName(hass, domain) for i18n lookups
 
 // Domains that show in summary section
 const SUMMARY_DOMAINS = [
@@ -210,7 +371,7 @@ class BaseTile extends LitElement {
 
   get isOn() {
     const state = this.entity?.state;
-    return state === "on" || state === "playing" || state === "open" || state === "unlocked";
+    return ["on", "playing", "open", "unlocked", "heat", "cool", "heat_cool", "auto", "cleaning", "returning", "home"].includes(state);
   }
 
   get isUnavailable() {
@@ -218,11 +379,11 @@ class BaseTile extends LitElement {
   }
 
   get stateDisplay() {
-    if (this.isUnavailable) return "無法使用";
+    if (this.isUnavailable) return _t(this.hass, "unavailable");
     const state = this.entity?.state;
-    if (state === "on") return "開啟";
-    if (state === "off") return "關閉";
-    if (state === "unavailable") return "無法使用";
+    if (state === "on") return _t(this.hass, "on");
+    if (state === "off") return _t(this.hass, "off");
+    if (state === "unavailable") return _t(this.hass, "unavailable");
     return state;
   }
 
@@ -385,13 +546,13 @@ customElements.define("base-tile", BaseTile);
 
 class LightTile extends BaseTile {
   get stateDisplay() {
-    if (this.isUnavailable) return "無法使用";
-    if (!this.isOn) return "關閉";
+    if (this.isUnavailable) return _t(this.hass, "unavailable");
+    if (!this.isOn) return _t(this.hass, "off");
     const brightness = this.entity?.attributes?.brightness;
     if (brightness) {
       return `${Math.round((brightness / 255) * 100)}%`;
     }
-    return "開啟";
+    return _t(this.hass, "on");
   }
 }
 
@@ -403,9 +564,9 @@ customElements.define("light-tile", LightTile);
 
 class ClimateTile extends BaseTile {
   get stateDisplay() {
-    if (this.isUnavailable) return "無法使用";
+    if (this.isUnavailable) return _t(this.hass, "unavailable");
     const state = this.entity?.state;
-    if (state === "off") return "關閉";
+    if (state === "off") return _t(this.hass, "off");
     const currentTemp = this.entity?.attributes?.current_temperature;
     const targetTemp = this.entity?.attributes?.temperature;
     if (currentTemp && targetTemp) return `${currentTemp}°C → ${targetTemp}°C`;
@@ -422,18 +583,18 @@ customElements.define("climate-tile", ClimateTile);
 
 class CoverTile extends BaseTile {
   get stateDisplay() {
-    if (this.isUnavailable) return "無法使用";
+    if (this.isUnavailable) return _t(this.hass, "unavailable");
     const state = this.entity?.state;
     const position = this.entity?.attributes?.current_position;
     if (position !== undefined) {
-      if (position === 0) return "關閉";
-      if (position === 100) return "開啟";
+      if (position === 0) return _t(this.hass, "closed");
+      if (position === 100) return _t(this.hass, "opened");
       return `${position}%`;
     }
-    if (state === "open") return "開啟";
-    if (state === "closed") return "關閉";
-    if (state === "opening") return "正在開啟";
-    if (state === "closing") return "正在關閉";
+    if (state === "open") return _t(this.hass, "opened");
+    if (state === "closed") return _t(this.hass, "closed");
+    if (state === "opening") return _t(this.hass, "opening");
+    if (state === "closing") return _t(this.hass, "closing");
     return state;
   }
 }
@@ -462,11 +623,11 @@ class FanTile extends BaseTile {
   }
 
   get stateDisplay() {
-    if (this.isUnavailable) return "無法使用";
-    if (!this.isOn) return "關閉";
+    if (this.isUnavailable) return _t(this.hass, "unavailable");
+    if (!this.isOn) return _t(this.hass, "off");
     const percentage = this.entity?.attributes?.percentage;
     if (percentage) return `${percentage}%`;
-    return "開啟";
+    return _t(this.hass, "on");
   }
 
   render() {
@@ -503,14 +664,14 @@ customElements.define("fan-tile", FanTile);
 
 class MediaPlayerTile extends BaseTile {
   get stateDisplay() {
-    if (this.isUnavailable) return "無法使用";
+    if (this.isUnavailable) return _t(this.hass, "unavailable");
     const state = this.entity?.state;
     const mediaTitle = this.entity?.attributes?.media_title;
     if (state === "playing" && mediaTitle) return mediaTitle;
-    if (state === "playing") return "播放中";
-    if (state === "paused") return "暫停";
-    if (state === "idle") return "閒置";
-    if (state === "off") return "關閉";
+    if (state === "playing") return _t(this.hass, "playing");
+    if (state === "paused") return _t(this.hass, "paused");
+    if (state === "idle") return _t(this.hass, "idle");
+    if (state === "off") return _t(this.hass, "off");
     return state;
   }
 }
@@ -523,12 +684,12 @@ customElements.define("media-player-tile", MediaPlayerTile);
 
 class LockTile extends BaseTile {
   get stateDisplay() {
-    if (this.isUnavailable) return "無法使用";
+    if (this.isUnavailable) return _t(this.hass, "unavailable");
     const state = this.entity?.state;
-    if (state === "locked") return "已鎖定";
-    if (state === "unlocked") return "已解鎖";
-    if (state === "locking") return "鎖定中";
-    if (state === "unlocking") return "解鎖中";
+    if (state === "locked") return _t(this.hass, "locked");
+    if (state === "unlocked") return _t(this.hass, "unlocked");
+    if (state === "locking") return _t(this.hass, "locking");
+    if (state === "unlocking") return _t(this.hass, "unlocking");
     return state;
   }
 }
@@ -541,14 +702,14 @@ customElements.define("lock-tile", LockTile);
 
 class VacuumTile extends BaseTile {
   get stateDisplay() {
-    if (this.isUnavailable) return "無法使用";
+    if (this.isUnavailable) return _t(this.hass, "unavailable");
     const state = this.entity?.state;
-    if (state === "cleaning") return "清掃中";
-    if (state === "docked") return "充電中";
-    if (state === "returning") return "返回中";
-    if (state === "paused") return "暫停";
-    if (state === "idle") return "閒置";
-    if (state === "error") return "錯誤";
+    if (state === "cleaning") return _t(this.hass, "cleaning");
+    if (state === "docked") return _t(this.hass, "docked");
+    if (state === "returning") return _t(this.hass, "returning");
+    if (state === "paused") return _t(this.hass, "paused");
+    if (state === "idle") return _t(this.hass, "idle");
+    if (state === "error") return _t(this.hass, "error");
     return state;
   }
 }
@@ -572,10 +733,10 @@ class SceneTile extends BaseTile {
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
-    if (minutes < 1) return "剛剛";
-    if (minutes < 60) return `${minutes} 分鐘前`;
-    if (hours < 24) return `${hours} 小時前`;
-    return `${days} 天前`;
+    if (minutes < 1) return _t(this.hass, "justNow");
+    if (minutes < 60) return `${minutes} ${_t(this.hass, "minutesAgo")}`;
+    if (hours < 24) return `${hours} ${_t(this.hass, "hoursAgo")}`;
+    return `${days} ${_t(this.hass, "daysAgo")}`;
   }
 
   toggle() {
@@ -602,7 +763,7 @@ customElements.define("switch-tile", SwitchTile);
 
 class SensorTile extends BaseTile {
   get stateDisplay() {
-    if (this.isUnavailable) return "無法使用";
+    if (this.isUnavailable) return _t(this.hass, "unavailable");
     const state = this.entity?.state;
     const unit = this.entity?.attributes?.unit_of_measurement;
     return unit ? `${state} ${unit}` : state;
@@ -622,16 +783,16 @@ customElements.define("sensor-tile", SensorTile);
 
 class BinarySensorTile extends BaseTile {
   get stateDisplay() {
-    if (this.isUnavailable) return "無法使用";
+    if (this.isUnavailable) return _t(this.hass, "unavailable");
     const state = this.entity?.state;
     const deviceClass = this.entity?.attributes?.device_class;
 
-    if (deviceClass === "door") return state === "on" ? "開啟" : "關閉";
-    if (deviceClass === "window") return state === "on" ? "開啟" : "關閉";
-    if (deviceClass === "motion") return state === "on" ? "偵測到" : "無動作";
-    if (deviceClass === "occupancy") return state === "on" ? "有人" : "無人";
+    if (deviceClass === "door") return state === "on" ? _t(this.hass, "opened") : _t(this.hass, "closed");
+    if (deviceClass === "window") return state === "on" ? _t(this.hass, "opened") : _t(this.hass, "closed");
+    if (deviceClass === "motion") return state === "on" ? _t(this.hass, "detected") : _t(this.hass, "clear");
+    if (deviceClass === "occupancy") return state === "on" ? _t(this.hass, "occupied") : _t(this.hass, "notOccupied");
 
-    return state === "on" ? "開啟" : "關閉";
+    return state === "on" ? _t(this.hass, "on") : _t(this.hass, "off");
   }
 
   toggle() {
@@ -677,8 +838,8 @@ customElements.define("script-tile", ScriptTile);
 
 class AutomationTile extends SceneTile {
   get stateDisplay() {
-    if (this.isUnavailable) return "無法使用";
-    return this.entity?.state === "on" ? "啟用" : "停用";
+    if (this.isUnavailable) return _t(this.hass, "unavailable");
+    return this.entity?.state === "on" ? _t(this.hass, "enabled") : _t(this.hass, "disabled");
   }
 }
 
@@ -690,11 +851,11 @@ customElements.define("automation-tile", AutomationTile);
 
 class HumidifierTile extends BaseTile {
   get stateDisplay() {
-    if (this.isUnavailable) return "無法使用";
-    if (!this.isOn) return "關閉";
+    if (this.isUnavailable) return _t(this.hass, "unavailable");
+    if (!this.isOn) return _t(this.hass, "off");
     const humidity = this.entity?.attributes?.humidity;
     if (humidity) return `${humidity}%`;
-    return "開啟";
+    return _t(this.hass, "on");
   }
 }
 
@@ -831,7 +992,7 @@ class DomainSection extends LitElement {
 
   render() {
     const icon = DOMAIN_ICONS[this.domain] || "mdi:help-circle";
-    const label = DOMAIN_LABELS[this.domain] || this.domain;
+    const label = _domainName(this.hass, this.domain);
 
     return html`
       <div class="section-header" @click=${this.toggleExpanded}>
@@ -965,8 +1126,8 @@ class DomainTabs extends LitElement {
   }
 
   _getLabel(domain) {
-    if (domain === 'all') return '全部';
-    return DOMAIN_LABELS[domain] || domain;
+    if (domain === 'all') return _t(this.hass, "all");
+    return _domainName(this.hass, domain);
   }
 
   render() {
@@ -1072,7 +1233,7 @@ class SearchBar extends LitElement {
         <ha-icon class="search-icon" icon="mdi:magnify"></ha-icon>
         <input type="text"
                .value=${this.value || ''}
-               placeholder=${this.placeholder || '搜尋...'}
+               placeholder=${this.placeholder || 'Search...'}
                @input=${this._handleInput}>
         ${this.value ? html`
           <button class="clear-btn" @click=${this._handleClear}>
@@ -1174,7 +1335,7 @@ class DomainSummary extends LitElement {
 
   render() {
     const icon = DOMAIN_ICONS[this.domain] || "mdi:help-circle";
-    const label = DOMAIN_LABELS[this.domain] || this.domain;
+    const label = _domainName(this.hass, this.domain);
     const color = DOMAIN_COLORS[this.domain] || "#9E9E9E";
     const colorRgb = this._hexToRgb(color);
 
@@ -1188,7 +1349,7 @@ class DomainSummary extends LitElement {
           <ha-icon icon=${icon}></ha-icon>
         </div>
         <div class="summary-label">${label}</div>
-        <div class="summary-count">${this.count} 開啟</div>
+        <div class="summary-count">${this.count} ${_t(this.hass, "on")}</div>
       </div>
     `;
   }
@@ -1210,6 +1371,7 @@ customElements.define("domain-summary", DomainSummary);
 class AreaCard extends LitElement {
   static get properties() {
     return {
+      hass: { type: Object },
       area: { type: Object },
     };
   }
@@ -1287,7 +1449,7 @@ class AreaCard extends LitElement {
           <ha-icon icon=${icon}></ha-icon>
         </div>
         <div class="area-name">${name}</div>
-        <div class="area-count">${count} entities</div>
+        <div class="area-count">${count} ${_t(this.hass, "entities")}</div>
       </div>
     `;
   }
@@ -1333,6 +1495,7 @@ class HaAreaControlPanel extends LitElement {
     // Memoization cache for domain counts
     this._cachedDomainCounts = null;
     this._lastHassStatesRef = null;
+    this._lastAreaEntitiesRef = null;
   }
 
   static get styles() {
@@ -1659,19 +1822,25 @@ class HaAreaControlPanel extends LitElement {
   }
 
   _getDomainCounts() {
-    // Memoization: return cached value if hass.states hasn't changed
-    if (this._cachedDomainCounts && this._lastHassStatesRef === this.hass?.states) {
+    // Memoization: return cached value if neither hass.states nor _areaEntities changed
+    if (
+      this._cachedDomainCounts &&
+      this._lastHassStatesRef === this.hass?.states &&
+      this._lastAreaEntitiesRef === this._areaEntities
+    ) {
       return this._cachedDomainCounts;
     }
     this._lastHassStatesRef = this.hass?.states;
+    this._lastAreaEntitiesRef = this._areaEntities;
 
     const counts = {};
+    const ON_STATES = ["on", "playing", "open", "unlocked", "heat", "cool", "heat_cool", "auto", "cleaning", "returning", "home"];
 
     for (const domain of SUMMARY_DOMAINS) {
       counts[domain] = 0;
     }
 
-    // Count entities in "on" state across all areas
+    // Count entities in active states across all areas
     for (const areaId of Object.keys(this._areaEntities)) {
       const entities = this._areaEntities[areaId];
       for (const [domain, entityIds] of Object.entries(entities)) {
@@ -1679,7 +1848,7 @@ class HaAreaControlPanel extends LitElement {
 
         for (const entityId of entityIds) {
           const state = this.hass?.states?.[entityId];
-          if (state && (state.state === "on" || state.state === "playing" || state.state === "open")) {
+          if (state && ON_STATES.includes(state.state)) {
             counts[domain] = (counts[domain] || 0) + 1;
           }
         }
@@ -1748,7 +1917,7 @@ class HaAreaControlPanel extends LitElement {
         ${this._renderHeader()}
         <div class="content">
           ${this._loading
-            ? html`<div class="loading">載入中...</div>`
+            ? html`<div class="loading">${_t(this.hass, "loading")}</div>`
             : this._loadError
               ? this._renderError()
               : this._renderView()}
@@ -1763,7 +1932,7 @@ class HaAreaControlPanel extends LitElement {
         <ha-icon class="error-icon" icon="mdi:alert-circle"></ha-icon>
         <div class="error-message">${this._loadError}</div>
         <button class="retry-button" @click=${this._handleRetry}>
-          重試
+          ${_t(this.hass, "retry")}
         </button>
       </div>
     `;
@@ -1779,7 +1948,7 @@ class HaAreaControlPanel extends LitElement {
   }
 
   _renderHeader() {
-    let title = "Area Control";
+    let title = _t(this.hass, "title");
     let showBack = false;
 
     if (this._view === "area") {
@@ -1787,7 +1956,7 @@ class HaAreaControlPanel extends LitElement {
       title = area?.name || "Area";
       showBack = true;
     } else if (this._view === "domain") {
-      title = DOMAIN_LABELS[this._selectedDomain] || this._selectedDomain;
+      title = _domainName(this.hass, this._selectedDomain);
       showBack = true;
     }
 
@@ -1795,12 +1964,12 @@ class HaAreaControlPanel extends LitElement {
       <div class="app-header">
         ${showBack
           ? html`
-              <button class="toolbar-icon" @click=${this._handleBack} title="返回">
+              <button class="toolbar-icon" @click=${this._handleBack} title=${_t(this.hass, "back")}>
                 <ha-icon icon="mdi:arrow-left"></ha-icon>
               </button>
             `
           : html`
-              <button class="toolbar-icon menu-btn" @click=${this._toggleSidebar} title="開啟側邊欄">
+              <button class="toolbar-icon menu-btn" @click=${this._toggleSidebar} title=${_t(this.hass, "openSidebar")}>
                 <ha-icon icon="mdi:menu"></ha-icon>
               </button>
             `}
@@ -1829,7 +1998,7 @@ class HaAreaControlPanel extends LitElement {
 
     return html`
       <div class="summary-section">
-        <div class="section-label">摘要</div>
+        <div class="section-label">${_t(this.hass, "summary")}</div>
         <div class="summary-grid">
           ${activeDomains.map(
             (domain) => html`
@@ -1845,11 +2014,12 @@ class HaAreaControlPanel extends LitElement {
       </div>
 
       <div class="areas-section">
-        <div class="section-label">分區</div>
+        <div class="section-label">${_t(this.hass, "areas")}</div>
         <div class="areas-grid">
           ${this._areas.map(
             (area) => html`
               <area-card
+                .hass=${this.hass}
                 .area=${area}
                 @area-selected=${this._handleAreaSelected}
               ></area-card>
@@ -1902,7 +2072,7 @@ class HaAreaControlPanel extends LitElement {
       return html`
         <search-bar
           .value=${this._searchQuery}
-          placeholder="搜尋裝置..."
+          placeholder=${_t(this.hass, "searchPlaceholder")}
           @search-changed=${this._handleSearchChanged}
         ></search-bar>
         <domain-tabs
@@ -1924,12 +2094,12 @@ class HaAreaControlPanel extends LitElement {
     // Single domain view
     const selectedEntities = this._filterEntities(entities[selectedDomain] || [], this._searchQuery);
     const sectionIcon = DOMAIN_ICONS[selectedDomain] || 'mdi:help-circle';
-    const sectionLabel = DOMAIN_LABELS[selectedDomain] || selectedDomain;
+    const sectionLabel = _domainName(this.hass, selectedDomain);
 
     return html`
       <search-bar
         .value=${this._searchQuery}
-        placeholder="搜尋裝置..."
+        placeholder=${_t(this.hass, "searchPlaceholder")}
         @search-changed=${this._handleSearchChanged}
       ></search-bar>
       <domain-tabs

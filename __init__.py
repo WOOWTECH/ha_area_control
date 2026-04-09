@@ -10,9 +10,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, PANEL_URL, PANEL_TITLE, PANEL_TITLE_ZH, PANEL_ICON, PANEL_VERSION
-from .panel import async_register_websocket_commands
 
 _LOGGER = logging.getLogger(__name__)
+
+# Domain name of ha_permission_manager
+_PERM_MANAGER_DOMAIN = "ha_permission_manager"
 
 
 def _get_panel_title(hass: HomeAssistant) -> str:
@@ -21,6 +23,11 @@ def _get_panel_title(hass: HomeAssistant) -> str:
     if language.startswith("zh"):
         return PANEL_TITLE_ZH
     return PANEL_TITLE
+
+
+def _has_permission_manager(hass: HomeAssistant) -> bool:
+    """Check if ha_permission_manager is loaded and providing WebSocket handlers."""
+    return _PERM_MANAGER_DOMAIN in hass.data
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -63,8 +70,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             require_admin=False,
         )
 
-    # Register WebSocket commands
-    await async_register_websocket_commands(hass)
+    # Only register standalone WebSocket commands if ha_permission_manager
+    # is NOT loaded. When permission_manager is present, it provides
+    # Store-based handlers for area_control/* commands that respect
+    # centralized permissions. Registering here would overwrite those.
+    if _has_permission_manager(hass):
+        _LOGGER.info(
+            "ha_permission_manager detected — skipping standalone WebSocket "
+            "handler registration (permission_manager provides area_control/* handlers)"
+        )
+    else:
+        _LOGGER.info(
+            "ha_permission_manager not detected — registering standalone "
+            "WebSocket handlers for area_control/*"
+        )
+        from .panel import async_register_websocket_commands
+        await async_register_websocket_commands(hass)
 
     _LOGGER.info("ha_area_control setup complete")
     return True
